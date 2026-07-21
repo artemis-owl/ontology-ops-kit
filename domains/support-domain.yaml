@@ -1,0 +1,28 @@
+apiVersion: semantics.artemis.owl/v1
+kind: OntologyDomain
+metadata:
+  name: support-domain
+  version: 1.2.0
+  owner: customer-operations
+terms:
+  - name: OpenTicket
+    summary: A support request that has not reached a resolved or closed state.
+    exclusions:
+      - Tickets awaiting customer reply
+      - Spam-classified requests
+    aliases:
+      - Active Ticket
+    mappings:
+      primarySource: postgres.supportdb.public.tickets
+      statusColumn: state IN ('new','in_progress')
+    notes: >-
+      "Awaiting customer reply" is excluded deliberately: it inflates queue depth
+      and makes response-time targets look worse than the team's actual backlog.
+
+  - name: EscalatedTicket
+    summary: An open ticket routed to a named engineer after breaching its first-response target.
+    exclusions:
+      - Tickets manually flagged as priority without a breach
+    mappings:
+      primarySource: postgres.supportdb.public.tickets
+      statusColumn: escalated_at IS NOT NULL

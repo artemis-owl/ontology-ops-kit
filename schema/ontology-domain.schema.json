@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/artemis-owl/ontology-ops-kit/schema/ontology-domain.schema.json",
+  "title": "OntologyDomain",
+  "description": "A versioned set of business term definitions. This schema mirrors lib/contract.mjs for editor autocomplete; CI enforcement runs through the kit's validator, which gives better error messages.",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "terms"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": { "const": "semantics.artemis.owl/v1" },
+    "kind": { "const": "OntologyDomain" },
+    "metadata": {
+      "type": "object",
+      "required": ["name", "version", "owner"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "description": "Domain identifier, e.g. customer-domain." },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "SemVer of meaning. Major = a definition's boundary moved."
+        },
+        "owner": { "type": "string", "description": "The team accountable for these definitions." }
+      }
+    },
+    "terms": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "summary"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9]*$",
+            "description": "Single-word term name, e.g. ActiveCustomer."
+          },
+          "summary": { "type": "string", "description": "The definition, in one sentence." },
+          "exclusions": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "What this term deliberately does not include. Changing this is a breaking change."
+          },
+          "aliases": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Other names in use for the same concept."
+          },
+          "mappings": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Where the definition is grounded in real infrastructure.",
+            "properties": {
+              "primarySource": { "type": "string", "description": "System of record, e.g. postgres.billingdb.public.subscriptions." },
+              "statusColumn": { "type": "string", "description": "The predicate that selects qualifying rows." },
+              "notes": { "type": "string" }
+            }
+          },
+          "notes": { "type": "string", "description": "Context that does not belong in the one-sentence summary." }
+        }
+      }
+    }
+  }
+}

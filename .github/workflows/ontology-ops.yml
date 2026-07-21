@@ -1,0 +1,41 @@
+name: ontology-ops
+
+# The enforcement leg. A definition whose boundary moved without a major bump
+# fails here, before it reaches anyone's dashboard.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # version-check compares against the base revision, so it needs history.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - run: npm ci
+
+      - name: Validate domains against the contract
+        run: npm run validate
+
+      - name: Check SemVer bumps cover the semantic changes
+        run: node ./bin/ontology-ops.mjs version-check --base origin/${{ github.base_ref || 'main' }}
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Fail if the generated glossary is stale
+        run: |
+          node ./bin/ontology-ops.mjs report --write GLOSSARY.md
+          if ! git diff --exit-code -- GLOSSARY.md; then
+            echo "::error::GLOSSARY.md is out of date. Run 'npm run report' and commit the result."
+            exit 1
+          fi

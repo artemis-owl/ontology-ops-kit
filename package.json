@@ -1,0 +1,43 @@
+{
+  "name": "@artemis-owl/ontology-ops-kit",
+  "version": "0.1.0",
+  "description": "Treat business definitions like API contracts: a declared ontology schema, a CI validator that enforces semantic versioning, and a derived glossary.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "bin": {
+    "ontology-ops": "./bin/ontology-ops.mjs"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "schema",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "validate": "node ./bin/ontology-ops.mjs validate",
+    "version-check": "node ./bin/ontology-ops.mjs version-check",
+    "report": "node ./bin/ontology-ops.mjs report --write GLOSSARY.md",
+    "test": "node --test test/*.test.mjs",
+    "check": "npm run validate && npm run test"
+  },
+  "keywords": [
+    "ontology",
+    "semantics",
+    "data-contracts",
+    "governance",
+    "semver",
+    "mcp"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/artemis-owl/ontology-ops-kit.git"
+  },
+  "homepage": "https://github.com/artemis-owl/ontology-ops-kit",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "yaml": "^2.9.0"
+  }
+}

@@ -1,0 +1,46 @@
+apiVersion: semantics.artemis.owl/v1
+kind: OntologyDomain
+metadata:
+  name: customer-domain
+  # SemVer applies to meaning: bump major when a definition's boundary moves.
+  version: 2.1.0
+  owner: platform-billing-squad
+terms:
+  - name: ActiveCustomer
+    summary: An identity that has completed a billable transaction in the last 30 days.
+    # What a term excludes is usually where the arguments are.
+    exclusions:
+      - Trial Users
+      - Paused Subscriptions
+      - Internal Test Accounts
+    aliases:
+      - Billed User
+      - Current Subscriber
+    # Mappings ground the definition in the physical data layer. Enough to point a
+    # developer or an agent at the system of record — not a full data dictionary.
+    mappings:
+      primarySource: postgres.billingdb.public.subscriptions
+      statusColumn: billing_status='active'
+
+  - name: TrialUser
+    summary: An identity inside a time-boxed evaluation period that has never been billed.
+    exclusions:
+      - Accounts that lapsed from a paid plan
+    aliases:
+      - Evaluator
+    mappings:
+      primarySource: postgres.billingdb.public.subscriptions
+      statusColumn: billing_status='trial'
+
+  - name: ChurnedCustomer
+    summary: An identity with no billable transaction in the last 90 days that previously had one.
+    exclusions:
+      - Trial Users
+      - Accounts closed for fraud
+    mappings:
+      primarySource: postgres.billingdb.public.subscriptions
+      statusColumn: billing_status='cancelled'
+    notes: >-
+      The 90-day window is a finance convention, not a product one. Product
+      analytics uses a 30-day window for engagement churn; that is a different
+      term and belongs in its own domain.
