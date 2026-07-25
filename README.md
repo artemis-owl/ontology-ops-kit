@@ -151,3 +151,10 @@ and [Semantics Belongs in the Runtime](https://artemisowl.io/research/semantics-
 from [Artemis Owl Systems](https://artemisowl.io).
 
 Apache-2.0.
+
+## Project status
+
+This kit is a **proof artifact**, not a maintained product. It demonstrates the
+practice described in the essays above; it will not grow a feature roadmap.
+Issues and PRs are read on a best-effort basis. Fork freely — the kit is
+designed to be copied into your repo, not depended on.
