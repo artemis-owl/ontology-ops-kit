@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/artemis-owl/ontology-ops-kit/schema/ontology-domain.schema.json",
   "title": "OntologyDomain",
-  "description": "A versioned set of business term definitions. This schema mirrors lib/contract.mjs for editor autocomplete; CI enforcement runs through the kit's validator, which gives better error messages.",
+  "description": "A versioned set of business term definitions. This schema is a subset of lib/contract.mjs for editor autocomplete: it agrees on every allowed key, the required ones, string-typed fields and unique exclusions/aliases entries, but cannot express duplicate term names or one term defined in two domains. CI enforcement runs through the kit's validator, which gives better error messages.",
   "type": "object",
   "required": ["apiVersion", "kind", "metadata", "terms"],
   "additionalProperties": false,
@@ -40,11 +40,13 @@
           "exclusions": {
             "type": "array",
             "items": { "type": "string" },
+            "uniqueItems": true,
             "description": "What this term deliberately does not include. Changing this is a breaking change."
           },
           "aliases": {
             "type": "array",
             "items": { "type": "string" },
+            "uniqueItems": true,
             "description": "Other names in use for the same concept."
           },
           "mappings": {

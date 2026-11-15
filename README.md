@@ -76,9 +76,16 @@ What triggers which bump:
 | Term removed | **major** | Consumers referencing it break |
 | `exclusions` changed | **major** | The boundary of the definition moved |
 | `primarySource` / `statusColumn` changed | **major** | Different system of record, different rows |
+| `primarySource` / `statusColumn` removed | **major** | The term lost its system of record |
 | Alias removed | **major** | Lookups using it stop resolving |
+| Domain removed, or its `metadata.name` changed | **fails** | Every term in it is gone and no version is left to bump; pass `--allow-removed` if that is intended |
 | Term added, alias added | **minor** | Additive; nothing existing breaks |
+| `primarySource` / `statusColumn` added to a term that had none | **minor** | Additive; nothing existing breaks |
 | `summary` reworded | **patch** ⚠️ | See below |
+| `notes`, `mappings.notes`, `metadata.owner` changed | not versioned | Not compared; any bump, or none, passes |
+
+Domains are matched by `metadata.name`, not by file name, so renaming a file
+and keeping its `metadata.name` is compared against the old file's content.
 
 **The honest limit:** whether a reworded summary moved the boundary is a judgment
 a diff cannot make. Rewording is reported as `patch` with a warning that says so
@@ -98,8 +105,9 @@ derived document from drifting back into a hand-maintained one.
 
 An agent told to "clean up test accounts" will decide for itself what a test
 account is unless something tells it. [`examples/mcp-server/`](examples/mcp-server/)
-serves the validated definitions over the Model Context Protocol, so the
-definitions an agent reads at runtime are the same ones CI enforced.
+serves the definitions in the domain directory over the Model Context Protocol.
+It parses the files as they are on disk; it does not validate them, so point it
+at a directory whose files CI has checked.
 
 ```bash
 claude mcp add ontology -- node /absolute/path/to/ontology-ops-kit/examples/mcp-server/server.mjs
@@ -112,33 +120,65 @@ asking rather than inventing.
 
 The fastest way to understand the kit is to break it on purpose:
 
-1. Open `domains/customer-domain.yaml` and add `- Paused Subscriptions` to
-   `ActiveCustomer`'s exclusions.
+1. Open `domains/customer-domain.yaml` and add `- Partner Reseller Accounts`
+   to `ActiveCustomer`'s exclusions.
 2. Run `npm run validate` — still passes. The file is well-formed; that is not
-   the failure being caught.
-3. Commit it, then run `npm run version-check`. It fails: you moved a boundary
-   while the version says `2.1.0`.
+   the failure being caught:
+   ```
+   ✓ 2 domains, 5 terms — contract satisfied.
+   ```
+3. Commit it, then run `npm run version-check`. It fails, exit 1: you moved a
+   boundary while the version says `2.1.0` (your base sha will differ):
+   ```
+   ✗ domains/customer-domain.yaml — version did not increase (2.1.0 -> 2.1.0) but changes require a major bump
+       [major] ActiveCustomer: exclusions changed (+Partner Reseller Accounts) — the boundary of the definition moved
+   = domains/support-domain.yaml: unchanged.
+
+   ✗ 1 domain changed meaning without an adequate version bump (base: d047f775).
+   ```
 4. Bump `version` to `3.0.0` and re-run. It passes, and the change is now
-   labeled for everyone downstream.
+   labeled for everyone downstream:
+   ```
+   ✓ domains/customer-domain.yaml — major bump covers the changes
+       [major] ActiveCustomer: exclusions changed (+Partner Reseller Accounts) — the boundary of the definition moved
+   = domains/support-domain.yaml: unchanged.
+
+   ✓ Version bumps cover the semantic changes (2 compared, base: d047f775).
+   ```
 5. Run `npm run report` and see `GLOSSARY.md` update itself.
 
 Then do the same thing with a typo — rename `exclusions` to `exclusion` — and
 watch `validate` catch it rather than silently ignoring a field it does not know.
+The same goes for an unknown top-level or `metadata` key, a non-string
+`metadata.name` or `metadata.owner`, and a repeated `exclusions` or `aliases`
+entry.
 
 ## Commands
 
 ```
 ontology-ops validate                    check every domain against the contract
 ontology-ops version-check [--base rev]  check bumps cover the semantic changes
+                           [--allow-removed]  report removed domains without failing
 ontology-ops report [--write FILE]       derive the glossary
                     [--dir PATH]         domain directory (default: domains)
 ```
 
+Without `--base`, `version-check` compares against the merge-base of `HEAD`
+with the first of `origin/main`, `origin/master`, `main`, `master` that exists,
+and failing all four, `HEAD~1`. It exits 1 without comparing anything when an
+explicit `--base` does not resolve, when `--dir` is outside the current git
+repository, or when a current domain file does not parse.
+
 ## Adopting it in a real repo
 
-Copy `bin/`, `lib/`, and the workflow into your repository, point `--dir` at
-wherever your definitions live, and delete the example domains. One dependency
-([`yaml`](https://www.npmjs.com/package/yaml)), Node 20+.
+Copy `bin/`, `lib/`, `package.json`, `package-lock.json`, and
+`.github/workflows/ontology-ops.yml` into your repository, point `--dir` at
+wherever your definitions live, and delete the example domains. The workflow
+runs `npm ci` (which needs both package files) and `npm test`; the tests run only
+if you copy `test/` too — without it, `npm test` runs 0 tests and the step passes
+having checked nothing. `schema/` is optional (editor
+autocomplete). One dependency ([`yaml`](https://www.npmjs.com/package/yaml)),
+Node 20+.
 
 Start with one field two systems currently disagree about — not the full
 vocabulary. The smallest contract worth enforcing is the one that caused your
