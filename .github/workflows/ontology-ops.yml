@@ -19,7 +19,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - run: npm ci
 
@@ -27,7 +27,18 @@ jobs:
         run: npm run validate
 
       - name: Check SemVer bumps cover the semantic changes
-        run: node ./bin/ontology-ops.mjs version-check --base origin/${{ github.base_ref || 'main' }}
+        # A pull request is compared with its merge-base, the CLI's default. A
+        # push to main is compared with the commit main was at before the push;
+        # comparing main with itself would check nothing.
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT" = "pull_request" ]; then
+            node ./bin/ontology-ops.mjs version-check
+          else
+            node ./bin/ontology-ops.mjs version-check --base "$BEFORE"
+          fi
 
       - name: Unit tests
         run: npm test
