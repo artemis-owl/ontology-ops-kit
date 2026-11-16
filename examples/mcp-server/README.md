@@ -1,12 +1,12 @@
 # Serving the ontology to agents over MCP
 
-The validated domain files are worth more if the systems acting on your data can
-read them. This example serves them over the [Model Context Protocol](https://modelcontextprotocol.io/)
+The domain files are worth more if the systems acting on your data can read
+them. This example serves the definitions in the domain directory, parsed (not
+validated — that is CI's job), over the [Model Context Protocol](https://modelcontextprotocol.io/)
 so an agent looks the definition up instead of inferring one.
 
 The scenario the kit exists for: you tell an agent to "clean up test accounts."
-Your ontology says `ActiveCustomer` explicitly excludes `Internal Test Accounts`,
-and that test accounts live in a particular table under a particular predicate.
+Your ontology says `ActiveCustomer` explicitly excludes `Internal Test Accounts`.
 Without that, the agent decides for itself what a test account is, and its guess
 is confident, plausible, and yours to explain afterward.
 
@@ -58,22 +58,23 @@ printf '%s\n' \
 
 Two deliberate choices. **Unknown terms return a refusal, not an empty result** —
 the response tells the agent the term is undefined and lists what is defined, so
-the failure mode is asking rather than inventing. And **exclusions are surfaced in
-capital letters**, because what a term excludes is the part an agent is most
+the failure mode is asking rather than inventing. And **exclusions are labeled
+`EXCLUDES`, in capitals**, because what a term excludes is the part an agent is most
 likely to get wrong.
 
 ## Where the CI loop closes
 
 ```
-domain files  ->  validated in CI  ->  served over MCP  ->  read by agents at runtime
+domain files  ->  checked in CI  ->  parsed and served over MCP  ->  read by agents at runtime
 ```
 
-The definitions an agent reads are the same ones the validator enforced. That is
-the whole point: no separate agent-facing copy to drift.
+The server reads the same files CI checks, not a separate agent-facing copy that
+could drift. It does not validate them itself: serve a directory whose changes go
+through CI, and an agent reads what the validator passed.
 
 ## Production note
 
-This server hand-rolls JSON-RPC over stdio in about 130 lines so the protocol
+This server hand-rolls JSON-RPC over stdio in about 125 lines so the protocol
 surface stays readable. For real deployments use the official MCP SDK — it
 handles transports, sessions, and error semantics properly. Copy the tool
 contract, not the plumbing.

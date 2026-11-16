@@ -98,3 +98,9 @@ test("the worked example: dropping trial users from ActiveCustomer", () => {
   assert.equal(result.ok, false);
   assert.equal(result.requiredName, "major");
 });
+
+test("a domain that is gone is reported, a kept one is not", async () => {
+  const { removedDomains } = await import("../lib/semantic-version.mjs");
+  assert.deepEqual(removedDomains(["customer", "support"], ["customer"]), ["support"]);
+  assert.deepEqual(removedDomains(["customer"], ["customer", "billing"]), []);
+});

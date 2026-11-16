@@ -6,11 +6,12 @@
 //   report         derive the glossary from the domain files
 
 import { writeFile } from "node:fs/promises";
+import path from "node:path";
 import process from "node:process";
 import { loadDomains, DEFAULT_DOMAIN_DIR } from "../lib/load.mjs";
 import { validateDomain, validateCollection } from "../lib/validate.mjs";
-import { checkVersionBump } from "../lib/semantic-version.mjs";
-import { domainAtRev, resolveBaseRev } from "../lib/git.mjs";
+import { checkVersionBump, removedDomains } from "../lib/semantic-version.mjs";
+import { domainsAtRev, repoRelativeDir, repoRoot, resolveBaseRev } from "../lib/git.mjs";
 import { renderGlossary, coverage } from "../lib/report.mjs";
 
 const argv = process.argv.slice(2);
@@ -31,7 +32,10 @@ Commands:
 Options:
   --dir <path>             domain directory (default: ${DEFAULT_DOMAIN_DIR})
   --base <rev>             version-check: revision to compare against
-                           (default: merge-base with origin/main, else HEAD~1)
+                           (default: merge-base of HEAD with the first of
+                           origin/main, origin/master, main, master that
+                           exists; else HEAD~1)
+  --allow-removed          version-check: report removed domains without failing
   --write <file>           report: write the glossary to a file
 `;
 
@@ -78,52 +82,116 @@ async function cmdValidate() {
 }
 
 async function cmdVersionCheck() {
-  const base = await resolveBaseRev(typeof flag("base") === "string" ? flag("base") : null);
+  // Never pass on something that could not be read: each of these is one line
+  // and exit 1, not a quiet "nothing to compare".
+  const fail = (line) => {
+    console.error(`✗ ${line}`);
+    process.exit(1);
+  };
+
+  const root = await repoRoot();
+  if (!root) fail(`${process.cwd()} is not inside a git repository — nothing to compare against.`);
+
+  const dirRel = await repoRelativeDir(root, dir);
+  if (!dirRel) fail(`--dir ${dir} is outside the git repository at ${root}.`);
+
+  const explicitBase = typeof flag("base") === "string" ? flag("base") : null;
+  const base = await resolveBaseRev(explicitBase, root);
   if (!base) {
+    if (explicitBase) fail(`--base ${explicitBase} does not resolve to a commit.`);
     console.log("No base revision to compare against (shallow clone or first commit) — skipping.");
     return;
   }
+  const short = base.slice(0, 8);
 
-  const loaded = await loadDomains(dir);
+  // Current files from the working tree, previous files from the base revision;
+  // both named by repository-relative path, so an absolute --dir prints the same.
+  const loaded = (await loadDomains(path.join(root, dirRel))).map((d) => ({
+    ...d,
+    file: path.relative(root, d.file).split(path.sep).join("/"),
+  }));
+  const previous = await domainsAtRev(dirRel, base, root);
+
+  if (loaded.length === 0 && previous.length === 0) {
+    fail(`No domain files in ${dirRel}/ now or at base ${short} — nothing was compared.`);
+  }
+
+  const unreadable = loaded.filter((d) => !d.doc || d.parseError);
+  if (unreadable.length) {
+    for (const d of unreadable) console.error(`✗ ${d.file}: does not parse — ${firstLine(d.parseError)}`);
+    process.exit(1);
+  }
+
+  // Domains are matched by metadata.name, so a file renamed with its name kept
+  // is compared against its old content; a name that is gone is a removal.
+  const nameOf = (d) => (typeof d.doc?.metadata?.name === "string" ? d.doc.metadata.name : d.file);
+  const previousByName = new Map();
+  for (const d of previous) {
+    if (!d.doc || d.parseError) {
+      console.log(`! ${short}:${d.file}: does not parse at the base revision — not compared.`);
+      continue;
+    }
+    if (!previousByName.has(nameOf(d))) previousByName.set(nameOf(d), d);
+  }
+
   let failures = 0;
   let compared = 0;
 
   for (const current of loaded) {
-    if (!current.doc) continue;
-    const previous = await domainAtRev(current.file, base);
-    if (!previous?.doc) {
+    const before = previousByName.get(nameOf(current));
+    if (!before) {
       console.log(`+ ${current.file}: new domain, nothing to compare.`);
       continue;
     }
     compared++;
+    const renamed = before.file !== current.file ? ` (was ${before.file})` : "";
 
-    const result = checkVersionBump(previous.doc, current.doc);
+    const result = checkVersionBump(before.doc, current.doc);
     if (result.changes.length === 0) {
-      console.log(`= ${current.file}: unchanged.`);
+      console.log(`= ${current.file}${renamed}: unchanged.`);
       continue;
     }
 
     const mark = result.ok ? "✓" : "✗";
-    console.log(`\n${mark} ${current.file} — ${result.reason}`);
+    console.log(`\n${mark} ${current.file}${renamed} — ${result.reason}`);
     for (const change of result.changes) {
       console.log(`    [${change.level}] ${change.term}: ${change.message}`);
     }
     if (!result.ok) failures++;
   }
 
+  const removed = removedDomains([...previousByName.keys()], loaded.map(nameOf));
+  const allowRemoved = argv.includes("--allow-removed");
+  if (removed.length) console.log("");
+  for (const name of removed) console.error(`✗ ${name}: domain removed — every term in it is gone`);
+  if (removed.length && allowRemoved) {
+    console.log(`  (${removed.length} removal${removed.length === 1 ? "" : "s"} accepted by --allow-removed)`);
+  }
+
   console.log("");
-  if (failures) {
-    console.error(
-      `✗ ${failures} domain${failures === 1 ? "" : "s"} changed meaning without an adequate version bump (base: ${base.slice(0, 8)}).`,
-    );
+  if (failures || (removed.length && !allowRemoved)) {
+    if (failures) {
+      console.error(
+        `✗ ${failures} domain${failures === 1 ? "" : "s"} changed meaning without an adequate version bump (base: ${short}).`,
+      );
+    }
+    if (removed.length && !allowRemoved) {
+      console.error(
+        `✗ ${removed.length} domain${removed.length === 1 ? "" : "s"} removed since base ${short}; pass --allow-removed if that is intended.`,
+      );
+    }
     process.exit(1);
   }
-  console.log(`✓ Version bumps cover the semantic changes (${compared} compared, base: ${base.slice(0, 8)}).`);
+  console.log(`✓ Version bumps cover the semantic changes (${compared} compared, base: ${short}).`);
+}
+
+function firstLine(s) {
+  return String(s ?? "unknown error").split("\n")[0];
 }
 
 async function cmdReport() {
   const loaded = await loadDomains(dir);
-  const markdown = renderGlossary(loaded);
+  const markdown = renderGlossary(loaded, { sourceDir: dir });
   const target = flag("write");
 
   if (typeof target === "string") {
